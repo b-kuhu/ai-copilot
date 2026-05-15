@@ -1,8 +1,10 @@
 import analyzeJD from "../tools/jobDescriptionAnalyzer.js";
+import resumeTailor from "../tools/resumeTailor.js";
 
 //map toolname to tool objects
 const toolMap = {
     analyzeJD: analyzeJD,
+    resumeTailor: resumeTailor
 }
 
 export async function runTool(toolName, toolInput) {
