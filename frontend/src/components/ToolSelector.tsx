@@ -1,3 +1,5 @@
+"use client";
+
 import { useState } from "react";
 import { ToolName } from "../types/copilot";
 
@@ -6,7 +8,12 @@ const options: { label: string; value: ToolName }[] = [
   { label: "Analyze Job Description", value: "analyzeJD" },
   { label: "Resume Tailor", value: "resumeTailor" },
 ]; 
-const ToolSelector = (selectedTool:ToolName, onChange:(tool:ToolName) => void) => {
+interface ToolSelectorProps {
+  selectedTool: ToolName;
+  onChange: (tool: ToolName) => void;
+}
+
+const ToolSelector = ({ selectedTool, onChange }: ToolSelectorProps) => {
   const [isOpen, setIsOpen] = useState(false);
   const [selected, setSelected] = useState<ToolName>(selectedTool);
   

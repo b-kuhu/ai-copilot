@@ -1,4 +1,6 @@
 
+"use client"
+
 import ToolSelector from "@/src/components/ToolSelector";
 import { ToolName } from "@/src/types/copilot";
 
