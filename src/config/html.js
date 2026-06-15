@@ -1,4 +1,4 @@
-export const getOtpHtml = ({ email, otp }) => {
+export const getOtpHtml = ( email, otp ) => {
   const html = `<!DOCTYPE html>
 <html lang="en">
 <head>
@@ -167,7 +167,7 @@ export const getVerifyEmailHtml = ({ email, token }) => {
   const appName = process.env.APP_NAME || "Authentication App";
   const baseUrl = process.env.FRONTEND_URL || "http://localhost:5173";
   const verifyUrl = `${baseUrl.replace(/\/+$/, "")}/token/${encodeURIComponent(token)}`;
-  console.log('verify url is ', verifyUrl)
+  
   const html = `<!DOCTYPE html>
 <html lang="en">
 <head>

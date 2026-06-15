@@ -5,8 +5,9 @@ import sanitize from "mongo-sanitize";
 import bcrypt from 'bcrypt';
 import User from "../models/User.js";
 import crypto from 'crypto';
-import { getVerifyEmailHtml } from "../config/html.js";
+import { getOtpHtml, getVerifyEmailHtml } from "../config/html.js";
 import sendEmail from "../config/sendMail.js";
+import { generateToken, verifyRefreshToken } from "../config/generateToken.js";
 
 export const register = TryCatch(async(req, res) => {
     const sanitizedBody = sanitize(req.body);
@@ -27,7 +28,6 @@ export const register = TryCatch(async(req, res) => {
         return res.status(400).json({ message: formattedErrors });
     }
     const { name, email, password } = validation.data;
-    console.log('email is ',email)
     //rate limiting using ip and email
     const rateLimitKey = `register:${req.ip}:${email}`;
     if(await redisClient.get(rateLimitKey)) {
@@ -118,7 +118,7 @@ export const loginUser = TryCatch(async(req, res) => {
         }
         return res.status(400).json({ message: formattedErrors });
     }
-    const { name, email } = validation.data;
+    const { email, password } = validation.data;
 
     const rateLimitKey = `login-rate-limit:${req.ip}:${email}`;
     if(await redisClient.get(rateLimitKey)) {
@@ -129,5 +129,85 @@ export const loginUser = TryCatch(async(req, res) => {
     if(!user){
         return res.status(400).json({message: 'Invalid credentials'})
     }
+
+    const comparePassword = await bcrypt.compare(password, user.password);
+
+    if(!comparePassword){
+        return res.status(400).json({message: 'Invalid credentials'})
+    }
+
+    const otp = Math.floor(100000 + Math.random() * 900000).toString(); // generate 6 digit otp
+    const otpKey = `otp:${email}`;
+    await redisClient.setEx(otpKey, 300, JSON.stringify(otp)); // expire in 5 mins
+    const subject = 'Your OTP for verification';
+    const html = getOtpHtml(email, otp);
+
+    await sendEmail(email, subject, html);
+    await redisClient.set(rateLimitKey, "true", {EX: 60}); // block for 1 min after each attempt
+
+    return res.json({
+        message: 'If your email is valid, an OTP has been sent. It will expire in 5 minutes.'
+    })
     
 })
+
+export const verifyOtp = TryCatch(async(req, res) => {
+    const { email, otp } = req.body;
+    if(!email || !otp){
+        return res.status(400).json({message: 'Email and OTP are required'})
+    }
+
+    const otpKey = `otp:${email}`;
+    const storedOtp = await redisClient.get(otpKey);
+    if(!storedOtp){
+        return res.status(400).json({message: 'OTP is expired'})
+    }
+
+    if(storedOtp !== JSON.stringify(otp)){
+        return res.status(400).json({message: 'Invalid OTP'})
+    }
+
+    await redisClient.del(otpKey);
+    let user = await User.findOne({email});
+    if(!user){
+        return res.status(400).json({message: 'User not found'})
+    }
+
+    const tokenData = await generateToken(user._id, res);
+    return res.status(200).json({
+        message:`Welcome ${user.name}`,
+        user
+    })
+
+})
+    
+export const myProfile = TryCatch( async(req, res) => {
+    const user = req.user; // req.user is set in isAuth middleware
+    res.json({ user })
+})
+
+export const refreshToken = TryCatch(async(req, res) => {
+    const refreshToken = req.cookies?.refreshToken;
+    if(!refreshToken){
+        return res.status(401).json({message: 'Invalid refresh token'})
+    }
+
+    const decoded = await verifyRefreshToken(refreshToken);
+    if(!decoded){
+        return res.status(401).json({message: 'Invalid refresh token'})
+    }
+
+    generateAccessToken(decoded.id, res);
+    res.status(200).json({message: 'Access token refreshed successfully'})
+})
+
+export const logout = TryCatch(async(req, res) => {
+    const userId = req.user._id;
+    await revokeRefreshToken(userId);
+    res.clearCookie('accessToken');
+    res.clearCookie('refreshToken');
+
+    await redisClient.del(`user:${userId}`); // clear cached user data
+    res.status(200).json({message: 'Logged out successfully'})
+})
+
