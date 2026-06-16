@@ -174,15 +174,33 @@ export const verifyOtp = TryCatch(async(req, res) => {
     }
 
     const tokenData = await generateToken(user._id, res);
+
     return res.status(200).json({
         message:`Welcome ${user.name}`,
-        user
+        user,
+        sessionInfo: {
+            sessionId: tokenData.sessionId,
+            loginTime: new Date().toISOString(),
+        }
     })
 
 })
     
 export const myProfile = TryCatch( async(req, res) => {
     const user = req.user; // req.user is set in isAuth middleware
+    const sessionId = req.sessionId;
+
+    const sessionData = await redisClient.get(`session:${sessionId}`)
+    let sessionInfo = null
+    if(sessionData){
+        const parsedSession = JSON.parse(sessionData)
+        sessionInfo = {
+            sessionId, 
+            loginTime: parsedSession.createdAt,
+            lastActivity: parsedSession.lastActivity
+        }
+    }
+
     res.json({ user })
 })
 
@@ -194,10 +212,12 @@ export const refreshToken = TryCatch(async(req, res) => {
 
     const decoded = await verifyRefreshToken(refreshToken);
     if(!decoded){
-        return res.status(401).json({message: 'Invalid refresh token'})
+        res.clearCookie('accessToken');
+        res.clearCookie('refreshToken');
+        return res.status(401).json({message: 'Session Expired. Please login'})
     }
 
-    generateAccessToken(decoded.id, res);
+    generateAccessToken(decoded.id, decode.sessionId, res);
     res.status(200).json({message: 'Access token refreshed successfully'})
 })
 
